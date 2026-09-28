@@ -65,12 +65,14 @@ function orderClause(order) {
 
 function select(where, params, order, limit) {
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const { total } = db.prepare(`SELECT COUNT(*) AS total FROM todos ${whereSql}`).get(...params);
+  const { total, open } = db
+    .prepare(`SELECT COUNT(*) AS total, COALESCE(SUM(done_at IS NULL), 0) AS open FROM todos ${whereSql}`)
+    .get(...params);
   const rows = db
     .prepare(`SELECT ${COLUMNS} FROM todos ${whereSql} ${orderClause(order)} LIMIT ?`)
     .all(...params, limit);
   const todos = rows.map(toTodo);
-  return { todos, count: todos.length, total };
+  return { todos, count: todos.length, total, open };
 }
 
 function getRow(slug) {
