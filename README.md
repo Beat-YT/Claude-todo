@@ -29,30 +29,28 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 
 | Tool | Input | Output |
 |---|---|---|
-| `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `{ todos, count, total }` |
-| `todo_search` | `query`, `limit?` (20), `status?` | `{ todos, count, total }` |
-| `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `{ todo }` |
-| `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `{ todo }` |
-| `todo_done` | `slug` | `{ todo, already_done }` |
-| `todo_delete` | `slug` | `{ slug, deleted: true }` |
+| `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `count=N total=M` + todo lines |
+| `todo_search` | `query`, `limit?` (20), `status?` | `count=N total=M` + todo lines |
+| `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `added` + todo line |
+| `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `updated` + todo line |
+| `todo_done` | `slug` | `done` or `already_done` + todo line |
+| `todo_delete` | `slug` | `deleted <slug>` |
 
-Every todo has the same shape:
+Output is plain text. Each todo is a Markdown checklist item on one line, fields in fixed order:
 
-```ts
-{
-  slug: string,                 // lowercase kebab-case id
-  prompt: string,
-  importance: 'low' | 'medium' | 'high',
-  date: string | null,          // YYYY-MM-DD (all-day) or ISO 8601 with offset
-  status: 'open' | 'done',
-  created_at: string,
-  done_at: string | null
-}
+```
+count=3 total=5
+- [ ] fix-auth | high | 2026-09-28 | Fix auth timeout
+- [ ] write-docs | medium | 2026-10-01T14:00:00-04:00 | Write 50% of docs
+- [x] old-task | low | - | Old thing
 ```
 
-Outputs are declared as MCP `outputSchema`s and returned as `structuredContent`, with the same JSON in the text content. `count` is how many were returned, `total` how many matched before `limit`.
+- `[ ]` open, `[x]` done.
+- `date` is `YYYY-MM-DD` (all-day), ISO 8601 with offset (timed), or `-` (none).
+- `prompt` is last so it may contain `|`; newlines in it are escaped as `\n`.
+- `count` is how many were returned, `total` how many matched before `limit`.
 
-Errors return `isError: true` with `{ "error": { "code", "message" } }`, where `code` is one of `NOT_FOUND`, `SLUG_EXISTS`, `INVALID_DATE`, `INVALID_INPUT`.
+Errors return `isError: true` with `error <CODE> <message>`, where `CODE` is one of `NOT_FOUND`, `SLUG_EXISTS`, `INVALID_DATE`, `INVALID_INPUT`.
 
 ### Behavior
 
