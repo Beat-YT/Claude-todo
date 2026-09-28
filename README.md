@@ -36,30 +36,33 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 | `todo_done` | `slug` | `# Done` or `# Already done` + todo |
 | `todo_delete` | `slug` | `# Deleted <slug>` |
 
-Output is Markdown. Each todo is a section with the checkbox and slug in the heading, importance and date on the next line, then the prompt as the body:
+Output is Markdown. Each todo is a section with the checkbox and slug in the heading, one meta item per line, then the prompt as the body:
 
 ```markdown
 # Todos (2 open, 3 total)
 
 ## [ ] iiot-examen-pratique-1
-high · 2026-09-28 08:10
+Importance: high
+Date: 2026-09-28 08:10
 
 Study chapters 3-5.
 Redo the Modbus lab.
 
 ## [ ] write-docs
-medium · 2026-10-01
+Importance: medium
+Date: 2026-10-01
 
 Write the README.
 
 ## [x] old-task
-low
+Importance: low
+Date: none
 
 Old thing
 ```
 
 - `[ ]` open, `[x]` done.
-- The date is `YYYY-MM-DD` for all-day todos or local `YYYY-MM-DD HH:MM`; it is left out when unset.
+- `Date` is `YYYY-MM-DD` for all-day todos, local `YYYY-MM-DD HH:MM` for timed ones, or `none`.
 - The heading counts cover everything matched; `, showing N` is appended when `limit` cut the results.
 
 Errors return `isError: true` with `# Error <CODE>` followed by the message, where `CODE` is one of `NOT_FOUND`, `SLUG_EXISTS`, `INVALID_DATE`, `INVALID_INPUT`.

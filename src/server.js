@@ -17,8 +17,9 @@ an importance (low, medium, high) and an optional date.
 - todo_delete: permanently remove a todo.
 
 Output is Markdown. Each todo is a section:
-  ## [ ] slug            ([x] when done)
-  high · 2026-09-28 08:10   (importance, then date if set: YYYY-MM-DD or local YYYY-MM-DD HH:MM)
+  ## [ ] slug                ([x] when done)
+  Importance: high
+  Date: 2026-09-28 08:10     (YYYY-MM-DD, local YYYY-MM-DD HH:MM, or "none")
 
   prompt, verbatim, may span several lines
 todo_list and todo_search start with "# Todos (<open> open, <total> total)" or "# Search "<query>" (...)",
@@ -42,12 +43,12 @@ function resolveDate(date) {
   return parsed;
 }
 
-// A todo as a Markdown section: checkbox and slug in the heading, importance and
-// date on the next line, then the prompt verbatim as the body.
+// A todo as a Markdown section: checkbox and slug in the heading, one meta item per
+// line, then the prompt verbatim as the body.
 function block(t) {
   const box = t.status === 'done' ? '[x]' : '[ ]';
-  const meta = t.date ? `${t.importance} · ${displayDate(t.date)}` : t.importance;
-  return `## ${box} ${t.slug}\n${meta}\n\n${t.prompt}`;
+  const date = t.date ? displayDate(t.date) : 'none';
+  return `## ${box} ${t.slug}\nImportance: ${t.importance}\nDate: ${date}\n\n${t.prompt}`;
 }
 
 function page(title, out) {
