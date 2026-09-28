@@ -16,8 +16,14 @@ an importance (low, medium, high) and an optional date.
 - todo_done: mark a todo as done.
 - todo_delete: permanently remove a todo.
 
-Every tool returns JSON. Failures return {"error": {"code", "message"}} with code one of
-NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
+Output is plain text. Todos are Markdown checklist items, one per line:
+  - [ ] slug | importance | date | prompt     (open)
+  - [x] slug | importance | date | prompt     (done)
+date is "-" when unset; newlines in prompt are escaped as \\n.
+  todo_list, todo_search: "count=<returned> total=<matched>", then one todo per line
+  todo_add: "added", todo_update: "updated", todo_done: "done" or "already_done", each followed by the todo line
+  todo_delete: "deleted <slug>"
+Failures: "error <CODE> <message>", CODE one of NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
 
 const Importance = z.enum(['low', 'medium', 'high']);
 const Status = z.enum(['open', 'done', 'all']);
@@ -34,40 +40,37 @@ function resolveDate(date) {
   return parsed;
 }
 
-const Todo = z.object({
-  slug: z.string(),
-  prompt: z.string(),
-  importance: Importance,
-  date: z.string().nullable().describe('YYYY-MM-DD for all-day todos, ISO 8601 with offset otherwise'),
-  status: z.enum(['open', 'done']),
-  created_at: z.string(),
-  done_at: z.string().nullable(),
-});
+// One todo per line as a Markdown checklist item, fixed field order. The prompt is
+// last so it may contain "|"; newlines are escaped to keep one todo per line.
+function line(t) {
+  const box = t.status === 'done' ? '[x]' : '[ ]';
+  const prompt = t.prompt.replace(/\r?\n/g, '\\n');
+  return `- ${box} ${t.slug} | ${t.importance} | ${t.date ?? '-'} | ${prompt}`;
+}
 
-const TodoPage = {
-  todos: z.array(Todo),
-  count: z.number().int().describe('Number of todos returned'),
-  total: z.number().int().describe('Number of todos matched before the limit was applied'),
+const text = {
+  page: out => [`count=${out.count} total=${out.total}`, ...out.todos.map(line)].join('\n'),
+  added: out => `added\n${line(out.todo)}`,
+  updated: out => `updated\n${line(out.todo)}`,
+  done: out => `${out.already_done ? 'already_done' : 'done'}\n${line(out.todo)}`,
+  deleted: out => `deleted ${out.slug}`,
 };
 
-function ok(out) {
-  return {
-    content: [{ type: 'text', text: JSON.stringify(out) }],
-    structuredContent: out,
-  };
+function ok(out, format) {
+  return { content: [{ type: 'text', text: format(out) }] };
 }
 
 function fail(code, message) {
   return {
-    content: [{ type: 'text', text: JSON.stringify({ error: { code, message } }) }],
+    content: [{ type: 'text', text: `error ${code} ${message}` }],
     isError: true,
   };
 }
 
-function handle(fn) {
+function handle(format, fn) {
   return async args => {
     try {
-      return ok(fn(args));
+      return ok(fn(args), format);
     } catch (e) {
       if (e instanceof TodoError) return fail(e.code, e.message);
       throw e;
@@ -96,10 +99,9 @@ export function createServer() {
         status: Status.optional().default('open'),
         importance: Importance.optional().describe('Only return todos of this importance'),
       },
-      outputSchema: TodoPage,
       annotations: { readOnlyHint: true },
     },
-    handle(({ limit, order, range, status, importance }) =>
+    handle(text.page, ({ limit, order, range, status, importance }) =>
       listTodos({ status, importance, before: rangeEnd(range), order, limit }),
     ),
   );
@@ -113,10 +115,9 @@ export function createServer() {
         limit: z.number().int().min(1).max(200).optional().default(20),
         status: Status.optional().default('open'),
       },
-      outputSchema: TodoPage,
       annotations: { readOnlyHint: true },
     },
-    handle(({ query, limit, status }) => {
+    handle(text.page, ({ query, limit, status }) => {
       if (!query.trim()) throw new TodoError('INVALID_INPUT', 'query must not be blank');
       return searchTodos({ query: query.trim(), status, limit });
     }),
@@ -135,9 +136,8 @@ export function createServer() {
           .describe(DATE_HELP),
         importance: Importance.optional().default('medium'),
       },
-      outputSchema: { todo: Todo },
     },
-    handle(({ slug, prompt, date, importance }) => {
+    handle(text.added, ({ slug, prompt, date, importance }) => {
       if (!prompt.trim()) throw new TodoError('INVALID_INPUT', 'prompt must not be blank');
       const parsed = date !== undefined ? resolveDate(date) : null;
       return { todo: addTodo({ slug, prompt: prompt.trim(), importance, date: parsed }) };
@@ -154,9 +154,8 @@ export function createServer() {
         date: z.string().nullable().optional().describe(`${DATE_HELP}. Pass null to clear the date`),
         importance: Importance.optional(),
       },
-      outputSchema: { todo: Todo },
     },
-    handle(({ slug, prompt, date, importance }) => {
+    handle(text.updated, ({ slug, prompt, date, importance }) => {
       if ([prompt, date, importance].every(v => v === undefined)) {
         throw new TodoError('INVALID_INPUT', 'Pass at least one of prompt, date, importance');
       }
@@ -173,10 +172,9 @@ export function createServer() {
     {
       description: 'Mark a todo as done. Calling it on an already-done todo is a no-op and reports already_done: true.',
       inputSchema: { slug: Slug },
-      outputSchema: { todo: Todo, already_done: z.boolean() },
       annotations: { idempotentHint: true },
     },
-    handle(({ slug }) => markDone(slug)),
+    handle(text.done, ({ slug }) => markDone(slug)),
   );
 
   mcp.registerTool(
@@ -184,10 +182,9 @@ export function createServer() {
     {
       description: 'Permanently delete a todo, open or done.',
       inputSchema: { slug: Slug },
-      outputSchema: { slug: z.string(), deleted: z.literal(true) },
       annotations: { destructiveHint: true },
     },
-    handle(({ slug }) => deleteTodo(slug)),
+    handle(text.deleted, ({ slug }) => deleteTodo(slug)),
   );
 
   return mcp;
