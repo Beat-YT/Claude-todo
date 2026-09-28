@@ -123,7 +123,7 @@ export function createServer() {
         date: z
           .string()
           .optional()
-          .describe('Due date: "today", "tomorrow", "YYYY-MM-DD" (all-day), relative "+30m" / "+2h" / "+1d" / "+1w", or ISO 8601 datetime'),
+          .describe('Due date. All-day: "today", "tomorrow", "YYYY-MM-DD". Timed, in the local machine timezone: "HH:MM" (today), "today 14:00", "tomorrow 09:30", "YYYY-MM-DD HH:MM[:SS]" or "YYYY-MM-DDTHH:MM[:SS]". Relative: "+30m", "+2h", "+1d", "+1w". An ISO 8601 datetime with Z or an offset keeps its own zone'),
         importance: Importance.optional().default('medium'),
       },
       outputSchema: { todo: Todo },

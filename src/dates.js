@@ -27,12 +27,28 @@ function allDay(d) {
  * value (YYYY-MM-DD for all-day, local ISO 8601 otherwise) and `ts` is the epoch ms
  * used for sorting and range filtering. Returns null if unparseable.
  */
+const TIME = String.raw`(\d{1,2}):(\d{2})(?::(\d{2}))?`;
+const NAIVE_DAY = new RegExp(String.raw`^(today|tomorrow|(\d{4})-(\d{2})-(\d{2}))(?:[t ]${TIME})?$`);
+const NAIVE_TIME = new RegExp(`^${TIME}$`);
+
+/**
+ * Builds a local-time result from calendar parts. Offset-less input is always taken
+ * in the machine's timezone. Without a time the result is all-day.
+ */
+function fromParts(y, m, d, time) {
+  const day = new Date(y, m - 1, d);
+  if (day.getFullYear() !== y || day.getMonth() !== m - 1 || day.getDate() !== d) return null;
+  if (!time) return allDay(day);
+
+  const [h, min, sec] = time;
+  if (h > 23 || min > 59 || sec > 59) return null;
+  const date = new Date(y, m - 1, d, h, min, sec);
+  return { date: localISO(date), ts: date.getTime() };
+}
+
 export function parseDate(input) {
   const s = input.trim().toLowerCase();
   const now = new Date();
-
-  if (s === 'today') return allDay(now);
-  if (s === 'tomorrow') return allDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1));
 
   const relative = s.match(/^\+(\d+)([mhdw])$/);
   if (relative) {
@@ -40,14 +56,24 @@ export function parseDate(input) {
     return { date: localISO(d), ts: d.getTime() };
   }
 
-  const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (ymd) {
-    const [y, m, d] = [+ymd[1], +ymd[2], +ymd[3]];
-    const date = new Date(y, m - 1, d);
-    if (date.getFullYear() !== y || date.getMonth() !== m - 1 || date.getDate() !== d) return null;
-    return allDay(date);
+  const timeOnly = s.match(NAIVE_TIME);
+  if (timeOnly) {
+    const time = timeOnly.slice(1, 4).map(n => +(n ?? 0));
+    return fromParts(now.getFullYear(), now.getMonth() + 1, now.getDate(), time);
   }
 
+  const naive = s.match(NAIVE_DAY);
+  if (naive) {
+    const [, word, y, m, d, h, min, sec] = naive;
+    const time = h !== undefined ? [+h, +min, +(sec ?? 0)] : null;
+    if (word === 'today' || word === 'tomorrow') {
+      const base = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (word === 'tomorrow' ? 1 : 0));
+      return fromParts(base.getFullYear(), base.getMonth() + 1, base.getDate(), time);
+    }
+    return fromParts(+y, +m, +d, time);
+  }
+
+  // Anything else (e.g. ISO 8601 with Z or an explicit offset) keeps its own zone.
   const parsed = new Date(input);
   if (isNaN(parsed.getTime())) return null;
   return { date: localISO(parsed), ts: parsed.getTime() };

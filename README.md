@@ -57,7 +57,11 @@ Errors return `isError: true` with `{ "error": { "code", "message" } }`, where `
 
 - **Ordering**: by date (undated last), then importance (high first), then creation time.
 - **Ranges**: `day` = due today or earlier, `week` = due by the end of this week (Monday–Sunday) or earlier. Overdue todos are always included; undated todos only appear with `any`.
-- **Dates**: `today`, `tomorrow`, `YYYY-MM-DD` (all-day), `+30m` / `+2h` / `+1d` / `+1w`, or any ISO 8601 datetime. Interpreted in local time.
+- **Dates**: input without a timezone is taken in the local machine timezone.
+  - All-day: `today`, `tomorrow`, `YYYY-MM-DD`
+  - Timed: `HH:MM[:SS]` (today), `today 14:00`, `tomorrow 09:30`, `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS]`
+  - Relative: `+30m`, `+2h`, `+1d`, `+1w`
+  - ISO 8601 with `Z` or an offset keeps its own zone; it is stored converted to local time.
 - **Slugs**: unique among open todos. Adding a slug that belongs to a done todo replaces it.
 - **Search**: case-insensitive substring match on slug and prompt.
 
