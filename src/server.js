@@ -12,7 +12,7 @@ an importance (low, medium, high) and an optional date.
 - todo_list: list todos by date, optionally limited to today ("day") or this week ("week").
   Overdue todos are included in both ranges.
 - todo_search: find todos whose slug or prompt contains a substring.
-- todo_update: change a todo's prompt, date, importance or slug. Pass date: null to clear the date.
+- todo_update: change a todo's prompt, date or importance. The slug cannot be changed. Pass date: null to clear the date.
 - todo_done: mark a todo as done.
 - todo_delete: permanently remove a todo.
 
@@ -147,24 +147,23 @@ export function createServer() {
   mcp.registerTool(
     'todo_update',
     {
-      description: 'Update an existing todo, open or done. Only the fields you pass change. Renaming to a slug held by an open todo fails with SLUG_EXISTS; a done todo holding it is replaced.',
+      description: 'Update an existing todo, open or done. Only the fields you pass change. The slug cannot be changed.',
       inputSchema: {
         slug: Slug.describe('Slug of the todo to update'),
-        new_slug: Slug.optional().describe('Rename the todo to this slug'),
         prompt: z.string().min(1).optional(),
         date: z.string().nullable().optional().describe(`${DATE_HELP}. Pass null to clear the date`),
         importance: Importance.optional(),
       },
       outputSchema: { todo: Todo },
     },
-    handle(({ slug, new_slug, prompt, date, importance }) => {
-      if ([new_slug, prompt, date, importance].every(v => v === undefined)) {
-        throw new TodoError('INVALID_INPUT', 'Pass at least one of new_slug, prompt, date, importance');
+    handle(({ slug, prompt, date, importance }) => {
+      if ([prompt, date, importance].every(v => v === undefined)) {
+        throw new TodoError('INVALID_INPUT', 'Pass at least one of prompt, date, importance');
       }
       if (prompt !== undefined && !prompt.trim()) throw new TodoError('INVALID_INPUT', 'prompt must not be blank');
       const parsed = date === undefined || date === null ? date : resolveDate(date);
       return {
-        todo: updateTodo(slug, { newSlug: new_slug, prompt: prompt?.trim(), importance, date: parsed }),
+        todo: updateTodo(slug, { prompt: prompt?.trim(), importance, date: parsed }),
       };
     }),
   );
