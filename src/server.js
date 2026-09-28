@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { parseDate, rangeEnd } from './dates.js';
+import { parseDate, rangeEnd, displayDate } from './dates.js';
 import { TodoError, addTodo, listTodos, searchTodos, updateTodo, markDone, deleteTodo } from './store.js';
 
 const INSTRUCTIONS = `You have a persistent todo list that survives restarts and is shared across sessions.
@@ -16,14 +16,17 @@ an importance (low, medium, high) and an optional date.
 - todo_done: mark a todo as done.
 - todo_delete: permanently remove a todo.
 
-Output is plain text. Todos are Markdown checklist items, one per line:
-  - [ ] slug | importance | date | prompt     (open)
-  - [x] slug | importance | date | prompt     (done)
-date is "-" when unset; newlines in prompt are escaped as \\n.
-  todo_list, todo_search: "count=<returned> total=<matched>", then one todo per line
-  todo_add: "added", todo_update: "updated", todo_done: "done" or "already_done", each followed by the todo line
-  todo_delete: "deleted <slug>"
-Failures: "error <CODE> <message>", CODE one of NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
+Output is Markdown. Each todo is a section:
+  ## [ ] slug                ([x] when done)
+  Importance: high
+  Date: 2026-09-28 08:10     (YYYY-MM-DD, local YYYY-MM-DD HH:MM, or "none")
+
+  prompt, verbatim, may span several lines
+todo_list and todo_search start with "# Todos (<open> open, <total> total)" or "# Search "<query>" (...)",
+with ", showing <n>" appended when the limit cut the results.
+todo_add, todo_update and todo_done start with "# Added", "# Updated", "# Done" or "# Already done", then the todo.
+todo_delete returns "# Deleted <slug>".
+Failures: "# Error <CODE>" then the message, CODE one of NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
 
 const Importance = z.enum(['low', 'medium', 'high']);
 const Status = z.enum(['open', 'done', 'all']);
@@ -40,20 +43,27 @@ function resolveDate(date) {
   return parsed;
 }
 
-// One todo per line as a Markdown checklist item, fixed field order. The prompt is
-// last so it may contain "|"; newlines are escaped to keep one todo per line.
-function line(t) {
+// A todo as a Markdown section: checkbox and slug in the heading, one meta item per
+// line, then the prompt verbatim as the body.
+function block(t) {
   const box = t.status === 'done' ? '[x]' : '[ ]';
-  const prompt = t.prompt.replace(/\r?\n/g, '\\n');
-  return `- ${box} ${t.slug} | ${t.importance} | ${t.date ?? '-'} | ${prompt}`;
+  const date = t.date ? displayDate(t.date) : 'none';
+  return `## ${box} ${t.slug}\nImportance: ${t.importance}\nDate: ${date}\n\n${t.prompt}`;
+}
+
+function page(title, out) {
+  let heading = `# ${title} (${out.open} open, ${out.total} total)`;
+  if (out.count < out.total) heading += `, showing ${out.count}`;
+  return [heading, ...out.todos.map(block)].join('\n\n');
 }
 
 const text = {
-  page: out => [`count=${out.count} total=${out.total}`, ...out.todos.map(line)].join('\n'),
-  added: out => `added\n${line(out.todo)}`,
-  updated: out => `updated\n${line(out.todo)}`,
-  done: out => `${out.already_done ? 'already_done' : 'done'}\n${line(out.todo)}`,
-  deleted: out => `deleted ${out.slug}`,
+  list: out => page('Todos', out),
+  search: out => page(`Search "${out.query}"`, out),
+  added: out => `# Added\n\n${block(out.todo)}`,
+  updated: out => `# Updated\n\n${block(out.todo)}`,
+  done: out => `# ${out.already_done ? 'Already done' : 'Done'}\n\n${block(out.todo)}`,
+  deleted: out => `# Deleted ${out.slug}`,
 };
 
 function ok(out, format) {
@@ -62,7 +72,7 @@ function ok(out, format) {
 
 function fail(code, message) {
   return {
-    content: [{ type: 'text', text: `error ${code} ${message}` }],
+    content: [{ type: 'text', text: `# Error ${code}\n\n${message}` }],
     isError: true,
   };
 }
@@ -101,7 +111,7 @@ export function createServer() {
       },
       annotations: { readOnlyHint: true },
     },
-    handle(text.page, ({ limit, order, range, status, importance }) =>
+    handle(text.list, ({ limit, order, range, status, importance }) =>
       listTodos({ status, importance, before: rangeEnd(range), order, limit }),
     ),
   );
@@ -117,9 +127,9 @@ export function createServer() {
       },
       annotations: { readOnlyHint: true },
     },
-    handle(text.page, ({ query, limit, status }) => {
+    handle(text.search, ({ query, limit, status }) => {
       if (!query.trim()) throw new TodoError('INVALID_INPUT', 'query must not be blank');
-      return searchTodos({ query: query.trim(), status, limit });
+      return { ...searchTodos({ query: query.trim(), status, limit }), query: query.trim() };
     }),
   );
 

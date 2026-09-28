@@ -92,3 +92,10 @@ export function rangeEnd(range) {
   }
   return null;
 }
+
+/** Display form of a stored date: "YYYY-MM-DD" as-is, datetimes as local "YYYY-MM-DD HH:MM". */
+export function displayDate(date) {
+  if (date.length === 10) return date;
+  const d = new Date(date);
+  return `${dayString(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
