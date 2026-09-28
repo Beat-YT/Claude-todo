@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { parseDate, rangeEnd } from './dates.js';
-import { TodoError, addTodo, listTodos, searchTodos, markDone, deleteTodo } from './store.js';
+import { TodoError, addTodo, listTodos, searchTodos, updateTodo, markDone, deleteTodo } from './store.js';
 
 const INSTRUCTIONS = `You have a persistent todo list that survives restarts and is shared across sessions.
 
@@ -12,6 +12,7 @@ an importance (low, medium, high) and an optional date.
 - todo_list: list todos by date, optionally limited to today ("day") or this week ("week").
   Overdue todos are included in both ranges.
 - todo_search: find todos whose slug or prompt contains a substring.
+- todo_update: change a todo's prompt, date, importance or slug. Pass date: null to clear the date.
 - todo_done: mark a todo as done.
 - todo_delete: permanently remove a todo.
 
@@ -24,6 +25,14 @@ const Slug = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'lowercase kebab-case, e.g. "fix-auth-timeout"')
   .max(64);
+
+const DATE_HELP = 'Due date. All-day: "today", "tomorrow", "YYYY-MM-DD". Timed, in the local machine timezone: "HH:MM" (today), "today 14:00", "tomorrow 09:30", "YYYY-MM-DD HH:MM[:SS]" or "YYYY-MM-DDTHH:MM[:SS]". Relative: "+30m", "+2h", "+1d", "+1w". An ISO 8601 datetime with Z or an offset keeps its own zone';
+
+function resolveDate(date) {
+  const parsed = parseDate(date);
+  if (!parsed) throw new TodoError('INVALID_DATE', `Could not parse date "${date}"`);
+  return parsed;
+}
 
 const Todo = z.object({
   slug: z.string(),
@@ -123,19 +132,40 @@ export function createServer() {
         date: z
           .string()
           .optional()
-          .describe('Due date. All-day: "today", "tomorrow", "YYYY-MM-DD". Timed, in the local machine timezone: "HH:MM" (today), "today 14:00", "tomorrow 09:30", "YYYY-MM-DD HH:MM[:SS]" or "YYYY-MM-DDTHH:MM[:SS]". Relative: "+30m", "+2h", "+1d", "+1w". An ISO 8601 datetime with Z or an offset keeps its own zone'),
+          .describe(DATE_HELP),
         importance: Importance.optional().default('medium'),
       },
       outputSchema: { todo: Todo },
     },
     handle(({ slug, prompt, date, importance }) => {
       if (!prompt.trim()) throw new TodoError('INVALID_INPUT', 'prompt must not be blank');
-      let parsed = null;
-      if (date !== undefined) {
-        parsed = parseDate(date);
-        if (!parsed) throw new TodoError('INVALID_DATE', `Could not parse date "${date}"`);
-      }
+      const parsed = date !== undefined ? resolveDate(date) : null;
       return { todo: addTodo({ slug, prompt: prompt.trim(), importance, date: parsed }) };
+    }),
+  );
+
+  mcp.registerTool(
+    'todo_update',
+    {
+      description: 'Update an existing todo, open or done. Only the fields you pass change. Renaming to a slug held by an open todo fails with SLUG_EXISTS; a done todo holding it is replaced.',
+      inputSchema: {
+        slug: Slug.describe('Slug of the todo to update'),
+        new_slug: Slug.optional().describe('Rename the todo to this slug'),
+        prompt: z.string().min(1).optional(),
+        date: z.string().nullable().optional().describe(`${DATE_HELP}. Pass null to clear the date`),
+        importance: Importance.optional(),
+      },
+      outputSchema: { todo: Todo },
+    },
+    handle(({ slug, new_slug, prompt, date, importance }) => {
+      if ([new_slug, prompt, date, importance].every(v => v === undefined)) {
+        throw new TodoError('INVALID_INPUT', 'Pass at least one of new_slug, prompt, date, importance');
+      }
+      if (prompt !== undefined && !prompt.trim()) throw new TodoError('INVALID_INPUT', 'prompt must not be blank');
+      const parsed = date === undefined || date === null ? date : resolveDate(date);
+      return {
+        todo: updateTodo(slug, { newSlug: new_slug, prompt: prompt?.trim(), importance, date: parsed }),
+      };
     }),
   );
 

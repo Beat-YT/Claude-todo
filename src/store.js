@@ -93,6 +93,51 @@ export function addTodo({ slug, prompt, importance, date }) {
   return toTodo(getRow(slug));
 }
 
+export function updateTodo(slug, { newSlug, prompt, importance, date }) {
+  const renaming = newSlug !== undefined && newSlug !== slug;
+  const sets = [];
+  const params = [];
+  if (renaming) {
+    sets.push('slug = ?');
+    params.push(newSlug);
+  }
+  if (prompt !== undefined) {
+    sets.push('prompt = ?');
+    params.push(prompt);
+  }
+  if (importance !== undefined) {
+    sets.push('importance = ?');
+    params.push(importance);
+  }
+  if (date !== undefined) {
+    // date === null clears the due date.
+    sets.push('date = ?', 'due_ts = ?');
+    params.push(date?.date ?? null, date?.ts ?? null);
+  }
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    if (!getRow(slug)) throw new TodoError('NOT_FOUND', `No todo with slug "${slug}"`);
+    if (renaming) {
+      const target = getRow(newSlug);
+      if (target && !target.done_at) {
+        throw new TodoError('SLUG_EXISTS', `An open todo with slug "${newSlug}" already exists`);
+      }
+      // Same rule as addTodo: a done todo's slug is free for reuse.
+      if (target) db.prepare('DELETE FROM todos WHERE slug = ?').run(newSlug);
+    }
+    db.prepare(`UPDATE todos SET ${sets.join(', ')} WHERE slug = ?`).run(...params, slug);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
+
+  const finalSlug = renaming ? newSlug : slug;
+  log('store', `updated ${slug}${renaming ? ` -> ${finalSlug}` : ''}`);
+  return toTodo(getRow(finalSlug));
+}
+
 export function listTodos({ status, importance, before, order, limit }) {
   const where = [];
   const params = [];

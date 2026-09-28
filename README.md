@@ -32,6 +32,7 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 | `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `{ todos, count, total }` |
 | `todo_search` | `query`, `limit?` (20), `status?` | `{ todos, count, total }` |
 | `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `{ todo }` |
+| `todo_update` | `slug`, `new_slug?`, `prompt?`, `date?` (`null` clears), `importance?` | `{ todo }` |
 | `todo_done` | `slug` | `{ todo, already_done }` |
 | `todo_delete` | `slug` | `{ slug, deleted: true }` |
 
@@ -62,7 +63,8 @@ Errors return `isError: true` with `{ "error": { "code", "message" } }`, where `
   - Timed: `HH:MM[:SS]` (today), `today 14:00`, `tomorrow 09:30`, `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS]`
   - Relative: `+30m`, `+2h`, `+1d`, `+1w`
   - ISO 8601 with `Z` or an offset keeps its own zone; it is stored converted to local time.
-- **Slugs**: unique among open todos. Adding a slug that belongs to a done todo replaces it.
+- **Slugs**: unique among open todos. Adding a slug that belongs to a done todo replaces it; so does renaming to one with `todo_update`.
+- **Updates**: only the fields passed change. Done todos can be updated too and stay done.
 - **Search**: case-insensitive substring match on slug and prompt.
 
 ## Configuration
