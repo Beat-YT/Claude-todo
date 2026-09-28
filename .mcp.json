@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "todo": {
+      "command": "node",
+      "args": ["src/index.js"]
+    }
+  }
+}
