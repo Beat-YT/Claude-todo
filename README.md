@@ -31,12 +31,14 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 |---|---|---|
 | `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `# Todos (...)` + todos |
 | `todo_search` | `query`, `limit?` (20), `status?` | `# Search "query" (...)` + todos |
-| `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `# Added` + todo |
-| `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `# Updated` + todo |
-| `todo_done` | `slug` | `# Done` or `# Already done` + todo |
-| `todo_delete` | `slug` | `# Deleted <slug>` |
+| `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `Added <slug>` |
+| `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `Updated <slug>` |
+| `todo_done` | `slug` | `Done <slug>` or `Already done <slug>` |
+| `todo_delete` | `slug` | `Deleted <slug>` |
 
-Output is Markdown. Each todo is a section with the checkbox and slug in the heading, one meta item per line, then the prompt as the body:
+Actions return a one-line confirmation and don't echo the todo back. When `todo_add` or `todo_update` was given a date, a second line `Date: <resolved>` follows, since inputs like `+3d` or `tomorrow 09:30` are resolved by the server.
+
+`todo_list` and `todo_search` return Markdown. Each todo is a section with the checkbox and slug in the heading, one meta item per line, then the prompt as the body:
 
 ```markdown
 # Todos (2 open, 3 total)
@@ -65,7 +67,7 @@ Old thing
 - `Date` is `YYYY-MM-DD` for all-day todos, local `YYYY-MM-DD HH:MM` for timed ones, or `none`.
 - The heading counts cover everything matched; `, showing N` is appended when `limit` cut the results.
 
-Errors return `isError: true` with `# Error <CODE>` followed by the message, where `CODE` is one of `NOT_FOUND`, `SLUG_EXISTS`, `INVALID_DATE`, `INVALID_INPUT`.
+Errors return `isError: true` with `Error <CODE>: <message>`, where `CODE` is one of `NOT_FOUND`, `SLUG_EXISTS`, `INVALID_DATE`, `INVALID_INPUT`.
 
 ### Behavior
 

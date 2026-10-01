@@ -24,9 +24,10 @@ Output is Markdown. Each todo is a section:
   prompt, verbatim, may span several lines
 todo_list and todo_search start with "# Todos (<open> open, <total> total)" or "# Search "<query>" (...)",
 with ", showing <n>" appended when the limit cut the results.
-todo_add, todo_update and todo_done start with "# Added", "# Updated", "# Done" or "# Already done", then the todo.
-todo_delete returns "# Deleted <slug>".
-Failures: "# Error <CODE>" then the message, CODE one of NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
+Actions return a one-line confirmation: "Added <slug>", "Updated <slug>", "Done <slug>",
+"Already done <slug>" or "Deleted <slug>". When todo_add or todo_update was given a date,
+a second line "Date: <resolved date>" follows.
+Failures: "Error <CODE>: <message>", CODE one of NOT_FOUND, SLUG_EXISTS, INVALID_DATE, INVALID_INPUT.`;
 
 const Importance = z.enum(['low', 'medium', 'high']);
 const Status = z.enum(['open', 'done', 'all']);
@@ -51,6 +52,11 @@ function block(t) {
   return `## ${box} ${t.slug}\nImportance: ${t.importance}\nDate: ${date}\n\n${t.prompt}`;
 }
 
+function withDate(line, todo, args) {
+  if (args.date === undefined || args.date === null) return line;
+  return `${line}\nDate: ${displayDate(todo.date)}`;
+}
+
 function page(title, out) {
   let heading = `# ${title} (${out.open} open, ${out.total} total)`;
   if (out.count < out.total) heading += `, showing ${out.count}`;
@@ -60,19 +66,21 @@ function page(title, out) {
 const text = {
   list: out => page('Todos', out),
   search: out => page(`Search "${out.query}"`, out),
-  added: out => `# Added\n\n${block(out.todo)}`,
-  updated: out => `# Updated\n\n${block(out.todo)}`,
-  done: out => `# ${out.already_done ? 'Already done' : 'Done'}\n\n${block(out.todo)}`,
-  deleted: out => `# Deleted ${out.slug}`,
+  // Actions only confirm; they don't echo back what the caller just sent. The one
+  // exception is a date the server resolved (e.g. "+3d"), which the caller can't know.
+  added: (out, args) => withDate(`Added ${out.todo.slug}`, out.todo, args),
+  updated: (out, args) => withDate(`Updated ${out.todo.slug}`, out.todo, args),
+  done: out => `${out.already_done ? 'Already done' : 'Done'} ${out.todo.slug}`,
+  deleted: out => `Deleted ${out.slug}`,
 };
 
-function ok(out, format) {
-  return { content: [{ type: 'text', text: format(out) }] };
+function ok(out, format, args) {
+  return { content: [{ type: 'text', text: format(out, args) }] };
 }
 
 function fail(code, message) {
   return {
-    content: [{ type: 'text', text: `# Error ${code}\n\n${message}` }],
+    content: [{ type: 'text', text: `Error ${code}: ${message}` }],
     isError: true,
   };
 }
@@ -80,7 +88,7 @@ function fail(code, message) {
 function handle(format, fn) {
   return async args => {
     try {
-      return ok(fn(args), format);
+      return ok(fn(args), format, args);
     } catch (e) {
       if (e instanceof TodoError) return fail(e.code, e.message);
       throw e;
