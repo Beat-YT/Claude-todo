@@ -93,6 +93,26 @@ export function rangeEnd(range) {
   return null;
 }
 
+export const PREVIEW_RANGES = ['today', 'tomorrow', 'week', 'next_week', 'upcoming'];
+
+/**
+ * Bounds (epoch ms) for a preview range as { after, before }: inclusive lower, exclusive
+ * upper, null for unbounded. Local time; weeks run Monday–Sunday. "today" and "week" are
+ * open on the past side so overdue todos stay visible; "tomorrow" and "next_week" are exact.
+ */
+export function rangeBounds(range) {
+  const now = new Date();
+  const day = n => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n).getTime();
+  const daysToMonday = ((8 - now.getDay()) % 7) || 7;
+  switch (range) {
+    case 'today': return { after: null, before: day(1) };
+    case 'tomorrow': return { after: day(1), before: day(2) };
+    case 'week': return { after: null, before: day(daysToMonday) };
+    case 'next_week': return { after: day(daysToMonday), before: day(daysToMonday + 7) };
+    default: return { after: now.getTime(), before: null };
+  }
+}
+
 /** Display form of a stored date: "YYYY-MM-DD" as-is, datetimes as local "YYYY-MM-DD HH:MM". */
 export function displayDate(date) {
   if (date.length === 10) return date;
