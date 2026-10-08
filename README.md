@@ -29,7 +29,7 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 
 | Tool | Input | Output |
 |---|---|---|
-| `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `# Todos (...)` + todos |
+| `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|tomorrow\|week\|next_week\|overdue\|upcoming\|any`, `status?` `open\|done\|all`, `importance?` | `# Todos (...)` + todos |
 | `todo_search` | `query`, `limit?` (20), `status?` | `# Search "query" (...)` + todos |
 | `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `Added <slug>` |
 | `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `Updated <slug>` |
@@ -72,7 +72,7 @@ Errors return `isError: true` with `Error <CODE>: <message>`, where `CODE` is on
 ### Behavior
 
 - **Ordering**: by date (undated last), then importance (high first), then creation time.
-- **Ranges**: `day` = due today or earlier, `week` = due by the end of this week (Monday–Sunday) or earlier. Overdue todos are always included; undated todos only appear with `any`.
+- **Ranges**: `day` = due today or earlier, `week` = due by the end of this week (Monday–Sunday) or earlier; both include overdue todos. `tomorrow` and `next_week` (next Monday–Sunday) are exact windows. `overdue` = due before now, `upcoming` = dated and not yet due. Undated todos only appear with `any`.
 - **Dates**: input without a timezone is taken in the local machine timezone.
   - All-day: `today`, `tomorrow`, `YYYY-MM-DD`
   - Timed: `HH:MM[:SS]` (today), `today 14:00`, `tomorrow 09:30`, `YYYY-MM-DD HH:MM[:SS]`, `YYYY-MM-DDTHH:MM[:SS]`

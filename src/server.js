@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { parseDate, rangeEnd, displayDate } from './dates.js';
+import { parseDate, rangeBounds, displayDate, RANGES } from './dates.js';
 import { TodoError, addTodo, listTodos, searchTodos, updateTodo, markDone, deleteTodo } from './store.js';
 
 const INSTRUCTIONS = `You have a persistent todo list that survives restarts and is shared across sessions.
@@ -9,8 +9,10 @@ Each todo has a slug (its id), a prompt (the task, written as an instruction to 
 an importance (low, medium, high) and an optional date.
 
 - todo_add: create a todo. Slugs are lowercase kebab-case and must be unique among open todos.
-- todo_list: list todos by date, optionally limited to today ("day") or this week ("week").
-  Overdue todos are included in both ranges.
+- todo_list: list todos by date, optionally limited to a range: "day" (today), "tomorrow",
+  "week" (through Sunday), "next_week" (Monday–Sunday), "overdue", "upcoming" (dated, not yet due) or "any".
+  "day" and "week" also include overdue todos; "tomorrow" and "next_week" are exact windows.
+  Undated todos only appear with "any". Use ranges during self-checks to see only what matters now.
 - todo_search: find todos whose slug or prompt contains a substring.
 - todo_update: change a todo's prompt, date or importance. The slug cannot be changed. Pass date: null to clear the date.
 - todo_done: mark a todo as done.
@@ -110,17 +112,17 @@ export function createServer() {
         limit: z.number().int().min(1).max(200).optional().default(50),
         order: z.enum(['asc', 'desc']).optional().default('asc').describe('Date order'),
         range: z
-          .enum(['day', 'week', 'any'])
+          .enum(RANGES)
           .optional()
           .default('any')
-          .describe('"day": due today or earlier. "week": due by the end of this week (Sunday) or earlier. "any": everything, including undated'),
+          .describe('"day": due today or earlier. "tomorrow": due tomorrow only. "week": due by the end of this week (Sunday) or earlier. "next_week": due next Monday through Sunday only. "overdue": due before now. "upcoming": dated and not yet due. "any": everything, including undated'),
         status: Status.optional().default('open'),
         importance: Importance.optional().describe('Only return todos of this importance'),
       },
       annotations: { readOnlyHint: true },
     },
     handle(text.list, ({ limit, order, range, status, importance }) =>
-      listTodos({ status, importance, before: rangeEnd(range), order, limit }),
+      listTodos({ status, importance, ...rangeBounds(range), order, limit }),
     ),
   );
 
