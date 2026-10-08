@@ -119,7 +119,7 @@ export function updateTodo(slug, { prompt, importance, date }) {
   return toTodo(getRow(slug));
 }
 
-export function listTodos({ status, importance, before, order, limit }) {
+export function listTodos({ status, importance, after, before, order, limit }) {
   const where = [];
   const params = [];
   const s = statusClause(status);
@@ -128,8 +128,13 @@ export function listTodos({ status, importance, before, order, limit }) {
     where.push('importance = ?');
     params.push(importance);
   }
+  if (after != null || before != null) where.push('due_ts IS NOT NULL');
+  if (after != null) {
+    where.push('due_ts >= ?');
+    params.push(after);
+  }
   if (before != null) {
-    where.push('due_ts IS NOT NULL AND due_ts < ?');
+    where.push('due_ts < ?');
     params.push(before);
   }
   return select(where, params, order, limit);

@@ -30,6 +30,7 @@ Register it in `.mcp.json` (project) or `~/.claude/.mcp.json` (user):
 | Tool | Input | Output |
 |---|---|---|
 | `todo_list` | `limit?` (50), `order?` `asc\|desc`, `range?` `day\|week\|any`, `status?` `open\|done\|all`, `importance?` | `# Todos (...)` + todos |
+| `todo_preview` | `range?` `today\|tomorrow\|week\|next_week\|upcoming` (upcoming), `limit?` (50), `status?` | `# Preview <range> (...)` + one line per todo |
 | `todo_search` | `query`, `limit?` (20), `status?` | `# Search "query" (...)` + todos |
 | `todo_add` | `slug`, `prompt`, `date?`, `importance?` `low\|medium\|high` (medium) | `Added <slug>` |
 | `todo_update` | `slug`, `prompt?`, `date?` (`null` clears), `importance?` | `Updated <slug>` |
@@ -71,6 +72,7 @@ Errors return `isError: true` with `Error <CODE>: <message>`, where `CODE` is on
 
 ### Behavior
 
+- **Preview**: `todo_preview` is the cheap look-ahead. It prints one line per dated todo (`- [ ] slug — date, importance — first line of the prompt, cut at 80 chars`) and never the body. `today` and `week` include overdue todos; `tomorrow` and `next_week` (next Monday–Sunday) are exact windows; `upcoming` is everything dated and not yet due.
 - **Ordering**: by date (undated last), then importance (high first), then creation time.
 - **Ranges**: `day` = due today or earlier, `week` = due by the end of this week (Monday–Sunday) or earlier. Overdue todos are always included; undated todos only appear with `any`.
 - **Dates**: input without a timezone is taken in the local machine timezone.

@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { parseDate, rangeEnd, displayDate } from './dates.js';
+import { parseDate, rangeEnd, rangeBounds, displayDate, PREVIEW_RANGES } from './dates.js';
 import { TodoError, addTodo, listTodos, searchTodos, updateTodo, markDone, deleteTodo } from './store.js';
 
 const INSTRUCTIONS = `You have a persistent todo list that survives restarts and is shared across sessions.
@@ -11,6 +11,8 @@ an importance (low, medium, high) and an optional date.
 - todo_add: create a todo. Slugs are lowercase kebab-case and must be unique among open todos.
 - todo_list: list todos by date, optionally limited to today ("day") or this week ("week").
   Overdue todos are included in both ranges.
+- todo_preview: compact one-line-per-todo overview of a time window ("today", "tomorrow", "week",
+  "next_week" or "upcoming"), without prompt bodies. Use it to look ahead cheaply; fetch details with todo_search.
 - todo_search: find todos whose slug or prompt contains a substring.
 - todo_update: change a todo's prompt, date or importance. The slug cannot be changed. Pass date: null to clear the date.
 - todo_done: mark a todo as done.
@@ -24,6 +26,8 @@ Output is Markdown. Each todo is a section:
   prompt, verbatim, may span several lines
 todo_list and todo_search start with "# Todos (<open> open, <total> total)" or "# Search "<query>" (...)",
 with ", showing <n>" appended when the limit cut the results.
+todo_preview starts with "# Preview <range> (...)" and lists one line per todo:
+  - [ ] slug — 2026-09-28 08:10, high — first line of the prompt, cut at 80 chars
 Actions return a one-line confirmation: "Added <slug>", "Updated <slug>", "Done <slug>",
 "Already done <slug>" or "Deleted <slug>". When todo_add or todo_update was given a date,
 a second line "Date: <resolved date>" follows.
@@ -57,14 +61,34 @@ function withDate(line, todo, args) {
   return `${line}\nDate: ${displayDate(todo.date)}`;
 }
 
+const PREVIEW_CHARS = 80;
+
+function snippet(prompt) {
+  const line = prompt.split('\n', 1)[0].trim();
+  return line.length > PREVIEW_CHARS ? `${line.slice(0, PREVIEW_CHARS - 1).trimEnd()}…` : line;
+}
+
+function previewLine(t) {
+  const box = t.status === 'done' ? '[x]' : '[ ]';
+  return `- ${box} ${t.slug} — ${displayDate(t.date)}, ${t.importance} — ${snippet(t.prompt)}`;
+}
+
 function page(title, out) {
   let heading = `# ${title} (${out.open} open, ${out.total} total)`;
   if (out.count < out.total) heading += `, showing ${out.count}`;
   return [heading, ...out.todos.map(block)].join('\n\n');
 }
 
+function previewPage(out) {
+  let heading = `# Preview ${out.range} (${out.open} open, ${out.total} total)`;
+  if (out.count < out.total) heading += `, showing ${out.count}`;
+  if (!out.todos.length) return heading;
+  return `${heading}\n\n${out.todos.map(previewLine).join('\n')}`;
+}
+
 const text = {
   list: out => page('Todos', out),
+  preview: previewPage,
   search: out => page(`Search "${out.query}"`, out),
   // Actions only confirm; they don't echo back what the caller just sent. The one
   // exception is a date the server resolved (e.g. "+3d"), which the caller can't know.
@@ -122,6 +146,27 @@ export function createServer() {
     handle(text.list, ({ limit, order, range, status, importance }) =>
       listTodos({ status, importance, before: rangeEnd(range), order, limit }),
     ),
+  );
+
+  mcp.registerTool(
+    'todo_preview',
+    {
+      description: 'Compact overview of dated todos in a time window: one line per todo (slug, date, importance, first line of the prompt), no bodies. Cheap way to look ahead; use todo_list for full prompts.',
+      inputSchema: {
+        range: z
+          .enum(PREVIEW_RANGES)
+          .optional()
+          .default('upcoming')
+          .describe('"today": due today or earlier. "tomorrow": due tomorrow only. "week": due by the end of this week (Sunday) or earlier. "next_week": due next Monday through Sunday only. "upcoming": dated and not yet due'),
+        limit: z.number().int().min(1).max(200).optional().default(50),
+        status: Status.optional().default('open'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    handle(text.preview, ({ range, limit, status }) => ({
+      ...listTodos({ status, ...rangeBounds(range), order: 'asc', limit }),
+      range,
+    })),
   );
 
   mcp.registerTool(
